@@ -23,6 +23,13 @@
 using boost::lexical_cast;
 using boost::bad_lexical_cast;
 
+#include <Poco\Net\HTTPRequest.h>
+#include <Poco\Net\HTTPResponse.h>
+#include <Poco/StreamCopier.h>
+#include <Poco/Path.h>
+#include <Poco/URI.h>
+#include <Poco/Exception.h>
+
 SqlCharDataSource::SqlCharDataSource( Poco::Logger& logger, shared_ptr<Database> db, const string& idFieldName, const string& wsFieldName ) : SqlDataSource(logger,db)
 {
 	_idFieldName = getDB()->escape(idFieldName);
@@ -148,7 +155,7 @@ Sqf::Value SqlCharDataSource::fetchCharacterInitial( string playerId, int server
 		//try getting previous character info
 		{
 			auto prevCharRes = getDB()->queryParams(
-				("SELECT `Generation`, `Humanity`, `Model`, `Infected` FROM `Character_DATA` WHERE `"+_idFieldName+"` = '%s' AND `Alive` = 0 ORDER BY `CharacterID` DESC LIMIT 1").c_str(), getDB()->escape(playerId).c_str());
+				("SELECT `Character_DATA`.`Generation`, `Player_DATA`.`Humanity`, `Character_DATA`.`Model`, `Character_DATA`.`Infected` FROM `Character_DATA` WHERE `"+_idFieldName+"` = '%s' AND `Alive` = 0 JOIN `Player_DATA` ON `Player_DATA`.`PlayerUID` = `Character_DATA`.`PlayerUID` ORDER BY `CharacterID` DESC LIMIT 1").c_str(), getDB()->escape(playerId).c_str());
 			if (prevCharRes && prevCharRes->fetchRow())
 			{
 				generation = prevCharRes->at(0).getInt32();
@@ -233,8 +240,8 @@ Sqf::Value SqlCharDataSource::fetchCharacterDetails( int characterId )
 	Sqf::Parameters retVal;
 	//get details from db
 	auto charDetRes = getDB()->queryParams(
-		"SELECT `%s`, `Medical`, `Generation`, `KillsZ`, `HeadshotsZ`, `KillsH`, `KillsB`, `CurrentState`, `Humanity`, `InstanceID` "
-		"FROM `Character_DATA` WHERE `CharacterID`=%d", _wsFieldName.c_str(), characterId);
+		"SELECT `Character_DATA`.`%s`, `Character_DATA`.`Medical`, `Character_DATA`.`Generation`, `Character_DATA`.`KillsZ`, `Character_DATA`.`HeadshotsZ`, `Character_DATA`.`KillsH`, `Character_DATA`.`KillsB`, `Character_DATA`.`CurrentState`, `Player_DATA`.`Humanity`, `Character_DATA`.`InstanceID` "
+		"FROM `Character_DATA` JOIN `Player_DATA` ON `Player_DATA`.`PlayerUID` = `Character_DATA`.`PlayerUID` WHERE `Character_DATA`.`CharacterID`=%d", _wsFieldName.c_str(), characterId);
 
 	if (charDetRes && charDetRes->fetchRow())
 	{
@@ -303,6 +310,7 @@ Sqf::Value SqlCharDataSource::fetchCharacterDetails( int characterId )
 bool SqlCharDataSource::updateCharacter( int characterId, int serverId, const FieldsType& fields )
 {
 	map<string,string> sqlFields;
+	string humanityMod = "";
 
 	for (auto it=fields.begin();it!=fields.end();++it)
 	{
@@ -336,14 +344,17 @@ bool SqlCharDataSource::updateCharacter( int characterId, int serverId, const Fi
 				integeroid = abs(integeroid);
 			}
 
-			if (integeroid > 0) 
+			if (integeroid > 0 && name != "Humanity") 
 				sqlFields[name] = "(`"+name+"` "+intSign+" "+lexical_cast<string>(integeroid)+")";
+			else
+				humanityMod = "(`"+name+"` "+intSign+" "+lexical_cast<string>(integeroid)+")";
 		}
 		//strings
 		else if (name == "Model")
 			sqlFields[name] = "'"+getDB()->escape(boost::get<string>(val))+"'";
 	}
 
+	bool exRes = false;
 	if (sqlFields.size() > 0)
 	{
 		string query = "UPDATE `Character_DATA` SET ";
@@ -359,13 +370,17 @@ bool SqlCharDataSource::updateCharacter( int characterId, int serverId, const Fi
 				query += " , ";
 		}
 		query += ", `InstanceID` = " + lexical_cast<string>(serverId) + "  WHERE `CharacterID` = " + lexical_cast<string>(characterId);
-		bool exRes = getDB()->execute(query.c_str());
+		exRes = getDB()->execute(query.c_str());
 		poco_assert(exRes == true);
-
-		return exRes;
+	}
+	if(humanityMod.size() != 0)
+	{
+		string query = "UPDATE `Player_DATA` SET `Humanity` = " + humanityMod;
+		exRes = getDB()->execute(query.c_str());
+		poco_assert(exRes == true);
 	}
 
-	return true;
+	return exRes;
 }
 
 bool SqlCharDataSource::initCharacter( int characterId, const Sqf::Value& inventory, const Sqf::Value& backpack )
