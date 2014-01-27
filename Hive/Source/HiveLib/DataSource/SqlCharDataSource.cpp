@@ -148,7 +148,7 @@ Sqf::Value SqlCharDataSource::fetchCharacterInitial( string playerId, int server
 		//try getting previous character info
 		{
 			auto prevCharRes = getDB()->queryParams(
-				("SELECT `Character_DATA`.`Generation`, `Player_DATA`.`Humanity`, `Character_DATA`.`Model`, `Character_DATA`.`Infected` FROM `Character_DATA` WHERE `"+_idFieldName+"` = '%s' AND `Alive` = 0 JOIN `Player_DATA` ON `Player_DATA`.`PlayerUID` = `Character_DATA`.`PlayerUID` ORDER BY `CharacterID` DESC LIMIT 1").c_str(), getDB()->escape(playerId).c_str());
+				("SELECT `Character_DATA`.`Generation`, `Player_DATA`.`Humanity`, `Character_DATA`.`Model`, `Character_DATA`.`Infected` FROM `Character_DATA` JOIN `Player_DATA` ON `Player_DATA`.`PlayerUID` = `Character_DATA`.`PlayerUID` WHERE `"+_idFieldName+"` = '%s' AND `Alive` = 0  ORDER BY `CharacterID` DESC LIMIT 1").c_str(), getDB()->escape(playerId).c_str());
 			if (prevCharRes && prevCharRes->fetchRow())
 			{
 				generation = prevCharRes->at(0).getInt32();
