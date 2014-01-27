@@ -23,13 +23,6 @@
 using boost::lexical_cast;
 using boost::bad_lexical_cast;
 
-#include <Poco\Net\HTTPRequest.h>
-#include <Poco\Net\HTTPResponse.h>
-#include <Poco/StreamCopier.h>
-#include <Poco/Path.h>
-#include <Poco/URI.h>
-#include <Poco/Exception.h>
-
 SqlCharDataSource::SqlCharDataSource( Poco::Logger& logger, shared_ptr<Database> db, const string& idFieldName, const string& wsFieldName ) : SqlDataSource(logger,db)
 {
 	_idFieldName = getDB()->escape(idFieldName);
